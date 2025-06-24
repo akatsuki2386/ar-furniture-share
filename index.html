@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <!-- =================================================================
+    1. ページの基本構成 (HTML & CSS)
+    目的: AR体験の土台となるWebページを作成し、見た目を整えます。
+    処理内容:
+      - ページのタイトルや文字コード(UTF-8)を設定します。
+      - スマートフォンで正しく表示されるようにviewportを設定します。
+      - CSSを使って、ボタンや表示要素の位置・色・サイズなどをデザインし、
+        使いやすく直感的な見た目にしています。
+    ================================----------------================== -->
+    <meta charset="UTF-8">
+    <title>AR家具配置デモ</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        #ar-button {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 9999px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s, transform 0.2s;
+            z-index: 10;
+        }
+        #info-box {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            border-radius: 8px;
+            font-size: 14px;
+            text-align: center;
+            display: none;
+            transition: opacity 0.3s;
+            z-index: 10;
+        }
+        #cursor {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 8px;
+            height: 8px;
+            background-color: white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            border: 2px solid rgba(0,0,0,0.5);
+            display: none;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body class="bg-gray-900">
+
+    <!-- ユーザーが操作する部品をHTMLで配置 -->
+    <div id="info-box"></div> <!-- 操作案内を表示するボックス -->
+    <div id="cursor"></div>   <!-- 画面中央のカーソル -->
+
+    <!-- ライブラリの読み込み設定 -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { ARButton } from 'three/addons/webxr/ARButton.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        // --- グローバル変数定義 ---
+        let camera, scene, renderer;
+        let raycaster;
+        let grabbedObject = null; // 掴んでいるオブジェクト
+        let hitTestSource = null; // 平面検出のソース
+        let hitTestSourceRequested = false;
+        let placementMarker; // 配置場所を示すマーカー
+        let hoveredObject = null; // カーソルが乗っているオブジェクト
+
+        // --- 操作判定用の変数 ---
+        let tapCount = 0;
+        let tapTimer = null;
+        const DOUBLE_TAP_DELAY = 300; // ダブルタップと判定する時間 (ミリ秒)
+        let longPressTimer = null;
+        const LONG_PRESS_DURATION = 500; // 長押しと判定する時間 (ミリ秒)
+        let isLongPressed = false;
+
+        let isModelLoading = false; // モデル読み込み中の重複実行を防ぐフラグ
+
+        // --- 定数とインスタンス ---
+        const loader = new GLTFLoader();
+        const modelUrl = './chair.glb';
+        const group = new THREE.Group(); // 配置したモデルをまとめるためのグループ
+        const infoBox = document.getElementById('info-box');
+        const cursor = document.getElementById('cursor');
+
+        // --- 初期化とアニメーション開始 ---
+        init();
+        animate();
+
+        /**
+         * 初期化処理
+         * ================================================================
+         * 2. 3D空間の準備 (Three.js 初期設定)
+         * 目的: 3Dオブジェクト(家具)を配置するための仮想的な3D空間を準備します。
+         * ================================================================
+         */
+        function init() {
+            // scene: 3Dオブジェクトやライトを置くための「舞台」を作成
+            scene = new THREE.Scene();
+            // camera: 3D空間をどの視点から見るかを決める「カメラ」を準備
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+            // light: オブジェクトが立体的に見えるように「照明」を2種類設置
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1.0); // 全体を均一に照らす光
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5); // 特定方向から照らし影を作る光
+            directionalLight.position.set(1, 1, 1).normalize();
+            scene.add(directionalLight);
+
+            // renderer: 作成した3D空間を画面に描画するための「描画エンジン」を準備
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            // renderer.xr.enabled = true: これでAR機能が使えるようになります
+            renderer.xr.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            /**
+             * ================================================================
+             * 3. AR機能の準備 (WebXR)
+             * 目的: 現実世界と3D空間を重ね合わせて表示するAR機能を有効にします。
+             * ================================================================
+             */
+
+            // ARコントローラー（画面タップ）のイベントリスナーを設定
+            const controller = renderer.xr.getController(0);
+            controller.addEventListener('selectstart', onSelectStart);
+            controller.addEventListener('selectend', onSelectEnd);
+            scene.add(controller);
+
+            // ARButton: WebXRに対応したデバイスで「ARを開始」ボタンを自動で生成
+            // requiredFeatures: ['hit-test']: 床や壁などの「平面検出」機能をリクエスト
+            const arButton = ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] });
+            arButton.id = 'ar-button';
+            arButton.textContent = 'ARを開始';
+            document.body.appendChild(arButton);
+
+            // ARセッションの開始・終了時にUIの表示/非表示を切り替える
+            renderer.xr.addEventListener('sessionstart', () => {
+                infoBox.style.display = 'block';
+                cursor.style.display = 'block';
+            });
+            renderer.xr.addEventListener('sessionend', () => {
+                infoBox.style.display = 'none';
+                cursor.style.display = 'none';
+                hitTestSourceRequested = false;
+                hitTestSource = null;
+            });
+
+            scene.add(group);
+
+            // 配置マーカー: ヒットテストで床を検出できた場所に表示するマーカーを作成
+            placementMarker = new THREE.Group();
+            const circleGeometry = new THREE.CircleGeometry(0.15, 64).rotateX(-Math.PI / 2);
+            const circleMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 });
+            const markerCircle = new THREE.Mesh(circleGeometry, circleMaterial);
+            const plusGeometryH = new THREE.PlaneGeometry(0.05, 0.01);
+            const plusGeometryV = new THREE.PlaneGeometry(0.01, 0.05);
+            const plusMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const plusH = new THREE.Mesh(plusGeometryH, plusMaterial);
+            const plusV = new THREE.Mesh(plusGeometryV, plusMaterial);
+            plusH.rotation.x = -Math.PI / 2;
+            plusV.rotation.x = -Math.PI / 2;
+            plusH.position.y = 0.001;
+            plusV.position.y = 0.001;
+            placementMarker.add(markerCircle, plusH, plusV);
+            placementMarker.visible = false;
+            scene.add(placementMarker);
+
+            // レイキャスター: 画面中央から光線を飛ばしてオブジェクトとの当たり判定に使う
+            raycaster = new THREE.Raycaster();
+
+            // ウィンドウリサイズへの対応
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        /**
+         * 3Dモデルをシーンに追加する非同期関数
+         * ================================================================
+         * 5. 家具モデルの読み込みと配置 (GLTFLoader)
+         * 目的: `chair.glb`という3Dモデルファイルを読み込み、AR空間に表示します。
+         * ================================================================
+         * @param {THREE.Vector3} position - モデルを配置する位置
+         */
+        async function addObject(position) {
+            if (isModelLoading) return;
+            isModelLoading = true;
+            infoBox.textContent = "イスを読み込み中...";
+
+            try {
+                // GLTFLoaderを使って、Webページとは別に3Dモデルファイルを非同期で読み込む
+                const gltf = await loader.loadAsync(modelUrl);
+                const model = gltf.scene;
+
+                // 読み込んだモデルが大きすぎたり小さすぎたりしないよう、自動で大きさを調整（スケーリング）
+                const box = new THREE.Box3().setFromObject(model);
+                const size = box.getSize(new THREE.Vector3());
+                const scale = 0.5 / size.y; // 高さが0.5mになるように統一
+                model.scale.set(scale, scale, scale);
+
+                // 読み込みが完了したら、指定された位置にモデルを配置
+                model.position.copy(position);
+                group.add(model);
+            } catch (e) {
+                console.error("イスの読み込みに失敗:", e);
+                infoBox.textContent = "モデル読み込み失敗！";
+            } finally {
+                isModelLoading = false;
+            }
+        }
+
+        /**
+         * オブジェクトに発光効果を設定/解除する（ハイライト用）
+         */
+        function setEmissiveEffect(object, color) {
+            if (!object) return;
+            object.traverse((child) => {
+                if (child.isMesh) child.material.emissive.setHex(color);
+            });
+        }
+
+        /**
+         * ================================================================
+         * 4. ユーザー操作の受付 (インタラクション処理)
+         * 目的: ユーザーの画面タップ操作を検知し、「シングルタップ」
+         * 「ダブルタップ」「長押し」の3種類のアクションを区別して実行します。
+         * ================================================================
+         */
+        // 画面が押された瞬間の処理
+        function onSelectStart() {
+            isLongPressed = false;
+            // ホバー中のオブジェクトがあれば、長押しタイマーを開始
+            if (hoveredObject && !grabbedObject) {
+                longPressTimer = setTimeout(() => {
+                    handleLongPress();
+                    isLongPressed = true;
+                }, LONG_PRESS_DURATION);
+            }
+        }
+        // 画面から指が離れた瞬間の処理
+        function onSelectEnd() {
+            clearTimeout(longPressTimer); // 長押しタイマーを解除
+            if (!isLongPressed) {
+                handleTap(); // 長押しでなければタップ処理へ
+            }
+        }
+
+        // シングル/ダブルタップを判定する処理
+        function handleTap() {
+            tapCount++;
+            if (tapCount === 1) {
+                // setTimeoutを使い、指定時間内に次のタップがなければシングルタップと判定
+                tapTimer = setTimeout(() => {
+                    handleSingleTap();
+                    tapCount = 0;
+                }, DOUBLE_TAP_DELAY);
+            } else if (tapCount === 2) {
+                // 指定時間内に次のタップがあればダブルタップと判定
+                clearTimeout(tapTimer);
+                handleDoubleTap();
+                tapCount = 0;
+            }
+        }
+
+        // シングルタップ: 家具を「掴む」「離す」または「配置する」
+        function handleSingleTap() {
+            if (grabbedObject) {
+                grabbedObject = null; // 掴んでいたら、その場に離す
+            } else {
+                if (hoveredObject) {
+                    grabbedObject = hoveredObject; // カーソルが合っている家具を掴む
+                    setEmissiveEffect(grabbedObject, 0x000000);
+                } else if (placementMarker.visible) {
+                    addObject(placementMarker.position); // マーカーの場所に新しい家具を配置
+                }
+            }
+        }
+
+        // ダブルタップ: 家具を45度ずつ「回転」させる
+        function handleDoubleTap() {
+            if (hoveredObject && !grabbedObject) {
+                hoveredObject.rotation.y += Math.PI / 4;
+            }
+        }
+
+        // 長押し: 家具をシーンから「削除」する
+        function handleLongPress() {
+            if (hoveredObject && !grabbedObject) {
+                infoBox.textContent = "家具を削除しました";
+                group.remove(hoveredObject);
+                hoveredObject = null;
+            }
+        }
+
+        /**
+         * ウィンドウリサイズ時の処理
+         */
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        /**
+         * アニメーションループを開始
+         */
+        function animate() {
+            // renderer.setAnimationLoop: render関数を毎フレーム呼び出す
+            renderer.setAnimationLoop(render);
+        }
+
+        /**
+         * 毎フレーム呼び出されるレンダリング関数 (プログラムの心臓部)
+         * ================================================================
+         * 6. メインループ処理 (アニメーションとレンダリング)
+         * 目的: 常に最新の状態を画面に描き続けるための処理です。
+         * ================================================================
+         * @param {number} timestamp - 時間
+         * @param {XRFrame} frame - XRフレーム
+         */
+        function render(timestamp, frame) {
+            if (frame) { // ARセッション中のみ実行
+                const referenceSpace = renderer.xr.getReferenceSpace();
+                const session = renderer.xr.getSession();
+
+                // ヒットテストソースの要求 (初回のみ)
+                if (hitTestSourceRequested === false) {
+                    session.requestReferenceSpace('viewer').then(refSpace => {
+                        session.requestHitTestSource({ space: refSpace }).then(source => { hitTestSource = source; });
+                    });
+                    session.addEventListener('end', () => { hitTestSourceRequested = false; hitTestSource = null; });
+                    hitTestSourceRequested = true;
+                }
+
+                // ヒットテストの実行: 常に床の検出を行う
+                if (hitTestSource) {
+                    const hitTestResults = frame.getHitTestResults(hitTestSource);
+                    if (hitTestResults.length > 0) {
+                        const hit = hitTestResults[0];
+                        const hitMatrix = new THREE.Matrix4().fromArray(hit.getPose(referenceSpace).transform.matrix);
+
+                        // まだオブジェクトがなければ、最初の平面検出で自動的に配置
+                        if (group.children.length === 0 && !isModelLoading) {
+                            const initialPosition = new THREE.Vector3().setFromMatrixPosition(hitMatrix);
+                            addObject(initialPosition);
+                        }
+
+                        // 家具の移動とマーカーの更新
+                        if (grabbedObject) {
+                            // 家具を掴んでいたら、検出した床の上を滑るように位置を更新
+                            placementMarker.visible = false;
+                            grabbedObject.position.setFromMatrixPosition(hitMatrix);
+                        } else {
+                            // 掴んでいないなら、配置マーカーの位置を更新
+                            placementMarker.visible = !hoveredObject;
+                            if (placementMarker.visible) {
+                                placementMarker.matrix.copy(hitMatrix);
+                            }
+                        }
+                    } else {
+                        placementMarker.visible = false;
+                    }
+                }
+
+                // カーソルとの交差判定 (レイキャスティング)
+                if (grabbedObject) {
+                    // 情報ボックスの更新
+                    infoBox.textContent = "床を滑らせて移動 / タップで配置";
+                } else {
+                    if (hoveredObject) {
+                        setEmissiveEffect(hoveredObject, 0x000000); // 前のフレームのハイライトを消す
+                        hoveredObject = null;
+                    }
+
+                    // 画面中央からレイを飛ばして家具に当たっているかを判定
+                    raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+                    const intersects = raycaster.intersectObjects(group.children, true);
+
+                    if (intersects.length > 0) {
+                        // 当たっていれば、その家具を操作対象とし、発光させて選択状態を伝える
+                        let intersectedObject = intersects[0].object;
+                        while (intersectedObject.parent && intersectedObject.parent !== group) {
+                            intersectedObject = intersectedObject.parent;
+                        }
+                        hoveredObject = intersectedObject;
+                        setEmissiveEffect(hoveredObject, 0x888888); // ハイライト
+                        infoBox.textContent = "タップ:移動 / ダブルタップ:回転 / 長押し:削除";
+                    } else {
+                        // 情報ボックスの更新
+                        if (placementMarker.visible) {
+                            infoBox.textContent = "マーカーをタップしてイスを追加";
+                        } else if (group.children.length > 0) {
+                            infoBox.textContent = "家具にカーソルを合わせてね";
+                        } else {
+                            infoBox.textContent = "床や壁をゆっくり映してね";
+                        }
+                    }
+                }
+                infoBox.style.display = 'block';
+            }
+            // 最終描画: 全ての計算結果を元に最終的な映像を画面に描画
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
