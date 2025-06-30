@@ -1124,6 +1124,7 @@
                 document.getElementById('rotate-right-button').innerHTML = rotateRightIconSVG;
 
                 renderer.xr.addEventListener('sessionstart', () => {
+                    document.getElementById('overlay').style.pointerEvents = 'auto';
                     document.getElementById('title-container').style.display = 'none';
                     resetScene();
                     isEditMode = true; 
@@ -1133,6 +1134,7 @@
                 });
 
                 renderer.xr.addEventListener('sessionend', () => {
+                    document.getElementById('overlay').style.pointerEvents = 'none';
                     document.getElementById('title-container').style.display = 'block';
                     resetScene();
                     document.getElementById('exit-ar-button').style.display = 'none';
