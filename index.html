@@ -88,7 +88,7 @@
             width: 100%;
             height: 100%;
             z-index: 10;
-            display: none;
+            pointer-events: none; /* ★★★ 修正点 ★★★: 初期状態ではイベントを透過させる */
         }
         #instruction-text {
             position: absolute;
@@ -509,6 +509,7 @@
             z-index: 250;
             padding-bottom: 15vh;
             box-sizing: border-box;
+            pointer-events: auto; /* このモーダル自体はイベントを受け取る */
         }
         #modal-content {
             background-color: rgba(45, 55, 72, 0.85);
@@ -1134,13 +1135,9 @@
                 document.getElementById('rotate-left-button').innerHTML = rotateLeftIconSVG;
                 document.getElementById('rotate-right-button').innerHTML = rotateRightIconSVG;
 
-                // <script type="module">内の該当箇所を修正
-
-                //【修正後】
                 renderer.xr.addEventListener('sessionstart', () => {
-                    document.getElementById('overlay').style.display = 'block'; // overlayを表示
+                    overlay.style.pointerEvents = 'auto'; // ★★★ 修正点 ★★★: AR中はイベントを受け付ける
                     document.getElementById('title-container').style.display = 'none';
-    
                     resetScene();
                     isEditMode = true; 
                     updateUI();
@@ -1148,21 +1145,17 @@
                     preloadModels();
                 });
 
-                //【修正後】
                 renderer.xr.addEventListener('sessionend', () => {
-                    document.getElementById('overlay').style.display = 'none'; // overlayを非表示
-    
-                    // スタート画面のボタンを再表示
+                    overlay.style.pointerEvents = 'none'; // ★★★ 修正点 ★★★: AR終了後はイベントを透過させる
                     document.getElementById('title-container').style.display = 'block';
-                    document.getElementById('ARButton').style.display = 'inline-block';
-                    createRoomButton.style.display = 'block';
-                    joinRoomButton.style.display = 'block';
-
                     resetScene();
                     document.getElementById('exit-ar-button').style.display = 'none';
                     document.getElementById('help-button').style.display = 'none';
                     document.getElementById('mode-switch-button').style.display = 'none';
                     stopDotAnimation(); 
+
+                    // ページをリロードして初期状態に戻す
+                    window.location.reload();
                 });
                 
                 animate();
