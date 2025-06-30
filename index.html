@@ -1134,9 +1134,13 @@
                 document.getElementById('rotate-left-button').innerHTML = rotateLeftIconSVG;
                 document.getElementById('rotate-right-button').innerHTML = rotateRightIconSVG;
 
+                // <script type="module">内の該当箇所を修正
+
+                //【修正後】
                 renderer.xr.addEventListener('sessionstart', () => {
-                    document.getElementById('overlay').style.display = 'block';
+                    document.getElementById('overlay').style.display = 'block'; // overlayを表示
                     document.getElementById('title-container').style.display = 'none';
+    
                     resetScene();
                     isEditMode = true; 
                     updateUI();
@@ -1144,6 +1148,7 @@
                     preloadModels();
                 });
 
+                //【修正後】
                 renderer.xr.addEventListener('sessionend', () => {
                     document.getElementById('overlay').style.display = 'none'; // overlayを非表示
     
@@ -1152,15 +1157,12 @@
                     document.getElementById('ARButton').style.display = 'inline-block';
                     createRoomButton.style.display = 'block';
                     joinRoomButton.style.display = 'block';
-                    
+
                     resetScene();
                     document.getElementById('exit-ar-button').style.display = 'none';
                     document.getElementById('help-button').style.display = 'none';
                     document.getElementById('mode-switch-button').style.display = 'none';
                     stopDotAnimation(); 
-
-                    // ページをリロードして初期状態に戻す
-                    window.location.reload();
                 });
                 
                 animate();
