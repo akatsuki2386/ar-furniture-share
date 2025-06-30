@@ -88,7 +88,7 @@
             width: 100%;
             height: 100%;
             z-index: 10;
-            pointer-events: none;
+            pointer-events: auto;
         }
         #instruction-text {
             position: absolute;
@@ -509,7 +509,6 @@
             z-index: 250;
             padding-bottom: 15vh;
             box-sizing: border-box;
-            pointer-events: auto; /* クリックイベントを有効にする */
         }
         #modal-content {
             background-color: rgba(45, 55, 72, 0.85);
@@ -589,6 +588,7 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
+        /* ▼▼▼ 追加したCSS ▼▼▼ */
         .menu-button {
             display: block; padding: 14px 24px; background-color: rgba(255, 255, 255, 0.2);
             color: white; text-decoration: none; border-radius: 9999px;
@@ -601,6 +601,7 @@
             color: white; padding: 10px; border-radius: 8px; font-size: 1.2rem; text-align: center; 
             margin-bottom: 20px;
         }
+        /* ▲▲▲ 追加したCSS ▲▲▲ */
     </style>
 </head>
 <body>
@@ -611,7 +612,6 @@
             <button id="join-room-button" class="menu-button">ルームに参加する</button>
         </div>
     </div>
-
     <div id="ios-ar-container">
         <h2>表示したい家具を選んでください</h2>
         <div id="ios-ar-links">
@@ -841,6 +841,17 @@
             </div>
         </div>
 
+        <div id="furniture-modal">
+            <div id="modal-content">
+                <div id="modal-header">
+                    <h2>家具を選択</h2>
+                    <button id="close-modal-button">&times;</button>
+                </div>
+                <div id="furniture-grid">
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <div id="join-room-modal" class="dialog-container">
@@ -853,18 +864,6 @@
             </div>
         </div>
     </div>
-
-    <div id="furniture-modal">
-        <div id="modal-content">
-            <div id="modal-header">
-                <h2>家具を選択</h2>
-                <button id="close-modal-button">&times;</button>
-            </div>
-            <div id="furniture-grid">
-            </div>
-        </div>
-    </div>
-
     <script type="importmap">
         {
             "imports": {
@@ -901,8 +900,10 @@
             let tabButtons, helpPages;
             let confirmDialog, objectPendingDeletion = null;
 
+            // ▼▼▼ 追加した変数 ▼▼▼
             let socket = null;
             let roomId = null;
+            // ▲▲▲ 追加した変数 ▲▲▲
 
             const furnitureData = [
                 { name: 'イス',   file: 'chair.glb',      height: 0.79, thumbnail: 'chair.png' },
@@ -939,21 +940,27 @@
             
             init();
 
+            // ▼▼▼ 追加した処理 ▼▼▼
+            // --- サーバー接続とUI処理 ---
             const arButton = document.getElementById('ARButton');
             const createRoomButton = document.getElementById('create-room-button');
             const joinRoomButton = document.getElementById('join-room-button');
             const joinRoomModal = document.getElementById('join-room-modal');
 
+            // ARボタンは「一人で試す」モードとして使う
             arButton.textContent = "一人で試す";
 
+            // 「ルーム作成」ボタンが押されたら
             createRoomButton.addEventListener('click', () => {
                 connectToServer('create');
+                // ARButtonを非表示にしてからクリックイベントを発火
                 arButton.style.display = 'none';
                 createRoomButton.style.display = 'none';
                 joinRoomButton.style.display = 'none';
-                arButton.click();
+                arButton.click(); // ARセッションを開始
             });
 
+            // 「ルームに参加」ボタンが押されたら
             joinRoomButton.addEventListener('click', () => {
                 joinRoomModal.style.display = 'flex';
             });
@@ -967,10 +974,11 @@
                 if (code) {
                     connectToServer('join', code);
                     joinRoomModal.style.display = 'none';
+                    // ARButtonを非表示にしてからクリックイベントを発火
                     arButton.style.display = 'none';
                     createRoomButton.style.display = 'none';
                     joinRoomButton.style.display = 'none';
-                    arButton.click();
+                    arButton.click(); // ARセッションを開始
                 }
             });
 
@@ -996,10 +1004,12 @@
 
                     if (data.type === 'roomCreated') {
                         roomId = data.roomId;
+                        // TODO: 画面にルームIDを表示する処理
                         console.log(`ルームが作成されました: ${roomId}`);
-                        alert(`ルームが作成されました: ${roomId}`);
+                        alert(`ルームが作成されました: ${roomId}`); // とりあえずアラートで表示
                     }
                     
+                    // 他の人が家具を置いた時の処理
                     if (data.type === 'placeObject') {
                         console.log("他のユーザーが家具を配置しました:", data.object);
                         
@@ -1022,6 +1032,7 @@
                     }
                 };
             }
+            // ▲▲▲ 追加した処理 ▲▲▲
             
             function createCrossMark() {
                 const canvas = document.createElement('canvas');
@@ -1124,7 +1135,6 @@
                 document.getElementById('rotate-right-button').innerHTML = rotateRightIconSVG;
 
                 renderer.xr.addEventListener('sessionstart', () => {
-                    document.getElementById('overlay').style.pointerEvents = 'auto';
                     document.getElementById('title-container').style.display = 'none';
                     resetScene();
                     isEditMode = true; 
@@ -1134,7 +1144,6 @@
                 });
 
                 renderer.xr.addEventListener('sessionend', () => {
-                    document.getElementById('overlay').style.pointerEvents = 'none';
                     document.getElementById('title-container').style.display = 'block';
                     resetScene();
                     document.getElementById('exit-ar-button').style.display = 'none';
@@ -1142,6 +1151,7 @@
                     document.getElementById('mode-switch-button').style.display = 'none';
                     stopDotAnimation(); 
 
+                    // ページをリロードして初期状態に戻す
                     window.location.reload();
                 });
                 
@@ -1382,9 +1392,7 @@
             }
 
             function handleTouchStart(event) {
-                if (event.target.closest('#furniture-modal')) return; // モーダル内のタッチは無視
-                if (event.target !== event.currentTarget && event.target.closest('[id^=ARButton], .menu-button, #join-room-modal')) return;
-
+                if (event.target !== event.currentTarget || confirmDialog.style.display === 'flex') return;
                 event.preventDefault();
 
                 gestureState.touchCount = event.touches.length;
@@ -1444,7 +1452,7 @@
             }
 
             function handleTouchMove(event) {
-                if (event.target.closest('#furniture-modal')) return;
+                if (event.target !== event.currentTarget || confirmDialog.style.display === 'flex') return;
                 event.preventDefault();
                 
                 if (gestureState.longPressTimer) {
@@ -1484,7 +1492,7 @@
             }
 
             function handleTouchEnd(event) {
-                if (event.target.closest('#furniture-modal')) return;
+                if (event.target !== event.currentTarget) return;
                 
                 const wasLongPressTriggered = !gestureState.longPressTimer;
                 clearTimeout(gestureState.longPressTimer);
@@ -1644,6 +1652,7 @@
                 }
             }
             
+            // ▼▼▼ 修正した関数 ▼▼▼
             function placeNewObject() { 
                 if (!previewObject) return;
                 const solidObject = previewObject.clone();
@@ -1652,15 +1661,17 @@
                 solidObject.position.copy(previewObject.position);
                 solidObject.rotation.copy(previewObject.rotation);
                 solidObject.scale.copy(previewObject.scale);
+                // userDataはコピーせず、必要な情報だけ送信する
 
                 scene.add(solidObject);
                 placedObjects.push(solidObject);
                 
+                // --- ★ここから追加★ ---
                 if (socket && socket.readyState === WebSocket.OPEN) {
                     const objectData = {
                         name: currentFurniture.name,
                         position: solidObject.position,
-                        rotation: solidObject.quaternion,
+                        rotation: solidObject.quaternion, // オイラー角ではなくクォータニオンを送る
                         scale: solidObject.scale
                     };
 
@@ -1669,12 +1680,14 @@
                         object: objectData
                     }));
                 }
+                // --- ★ここまで★ ---
 
                 scene.remove(previewObject);
                 previewObject = null;
                 appState = 'IDLE';
                 updateUI();
             }
+            // ▲▲▲ 修正した関数 ▲▲▲
             
             function setObjectTransparency(object, isTransparent, opacity = 0.7) {
                 if (!object) return;
