@@ -88,7 +88,7 @@
             width: 100%;
             height: 100%;
             z-index: 10;
-            pointer-events: auto;
+            display: none;
         }
         #instruction-text {
             position: absolute;
@@ -1135,6 +1135,7 @@
                 document.getElementById('rotate-right-button').innerHTML = rotateRightIconSVG;
 
                 renderer.xr.addEventListener('sessionstart', () => {
+                    document.getElementById('overlay').style.display = 'block';
                     document.getElementById('title-container').style.display = 'none';
                     resetScene();
                     isEditMode = true; 
@@ -1144,7 +1145,14 @@
                 });
 
                 renderer.xr.addEventListener('sessionend', () => {
+                    document.getElementById('overlay').style.display = 'none'; // overlayを非表示
+    
+                    // スタート画面のボタンを再表示
                     document.getElementById('title-container').style.display = 'block';
+                    document.getElementById('ARButton').style.display = 'inline-block';
+                    createRoomButton.style.display = 'block';
+                    joinRoomButton.style.display = 'block';
+                    
                     resetScene();
                     document.getElementById('exit-ar-button').style.display = 'none';
                     document.getElementById('help-button').style.display = 'none';
