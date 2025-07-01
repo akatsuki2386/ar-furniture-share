@@ -1079,36 +1079,43 @@
                 };
             }
 
+            // index.html の <script type="module"> 内
+            // この関数をまるごと置き換えてください
+
             function handleRemoteObjectPlacement(objectData) {
                 if (placedObjects.has(objectData.uuid)) return;
-
+            
                 const furniture = furnitureData.find(f => f.name === objectData.name);
-                // ★ 変更点: 該当する家具データがない場合のエラーログを追加
                 if (!furniture) {
                     logToScreen(`[ERROR] Furniture data not found for name: ${objectData.name}`);
                     return;
                 }
-
+            
                 const gltf = preloadedModels.get(furniture.file);
-                // ★ 変更点: モデルがプリロードされていない場合のエラーログを追加
                 if (!gltf) {
-                    logToScreen(`[ERROR] Model not preloaded: ${furniture.file}`);
+                    logToScreen(`[ERROR] Model not loaded yet: ${furniture.file}`);
                     console.error(`Model not preloaded: ${furniture.file}`);
                     return;
                 }
-
+            
+                // ★ 変更点：受信した座標データをログに表示
+                const pos = objectData.position;
+                logToScreen(`[RECV] Pos: X=${pos.x.toFixed(2)}, Y=${pos.y.toFixed(2)}, Z=${pos.z.toFixed(2)}`);
+            
                 const newObject = gltf.scene.clone();
                 newObject.uuid = objectData.uuid;
                 setObjectTransparency(newObject, false);
-
+            
                 newObject.position.copy(objectData.position);
                 newObject.quaternion.copy(objectData.rotation);
                 newObject.scale.copy(objectData.scale);
                 
                 scene.add(newObject);
                 placedObjects.set(newObject.uuid, newObject);
+            
+                // ★ 変更点：シーンへの追加が成功したことをログに表示
+                logToScreen('[SUCCESS] Object added to scene.');
             }
-
             function init() {
                 scene = new THREE.Scene();
                 camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
