@@ -921,6 +921,8 @@
             let appState = 'IDLE';
             let isEditMode = false; 
             let isFloorDetected = false;
+            
+            const objectQueue = []; // 配置待ちのオブジェクトデータを入れる配列
 
             const objectsToDelete = []; 
             const clock = new THREE.Clock();
@@ -944,7 +946,6 @@
 
             init();
             
-            // ★ 最終修正: ディープクローン用のヘルパー関数
             function cloneModelWithNewMaterials(model) {
                 const clone = model.clone();
                 clone.traverse(node => {
@@ -1094,6 +1095,12 @@
             function handleRemoteObjectPlacement(objectData) {
                 if (placedObjects.has(objectData.uuid)) return;
 
+                if (!isFloorDetected) {
+                    logToScreen(`[QUEUE] AR not ready. Queuing object: ${objectData.name}`);
+                    objectQueue.push(objectData);
+                    return;
+                }
+
                 const furniture = furnitureData.find(f => f.name === objectData.name);
                 if (!furniture) {
                     logToScreen(`[ERROR] Furniture data not found for name: ${objectData.name}`);
@@ -1106,16 +1113,14 @@
                     return;
                 }
                 
-                // ★ 最終修正: ディープクローンを実行
                 const newObject = cloneModelWithNewMaterials(gltf.scene);
 
                 newObject.uuid = objectData.uuid;
                 setObjectTransparency(newObject, false);
                 
-                // ★ 最終修正: 座標設定ロジックをY座標合わせに戻す
                 newObject.position.set(
                     objectData.position.x,
-                    floorY !== null ? floorY : 0,
+                    floorY,
                     objectData.position.z
                 );
                 
@@ -1125,7 +1130,7 @@
                 scene.add(newObject);
                 placedObjects.set(newObject.uuid, newObject);
 
-                logToScreen(`[INFO] Added object ${objectData.name} to scene.`);
+                logToScreen(`[SUCCESS] Added object ${objectData.name} to scene.`);
             }
 
             function init() {
@@ -1963,17 +1968,27 @@
                         if (hitTestResults.length > 0) {
                             const hit = hitTestResults[0];
                             const hitPose = hit.getPose(referenceSpace);
-                            const hitY = hitPose.transform.position.y;
                             
-                            if (floorY === null) floorY = hitY;
+                            if (floorY === null) {
+                                floorY = hitPose.transform.position.y;
+                            }
                             
                             if (!isFloorDetected) {
                                 isFloorDetected = true;
+                                logToScreen(`[SYSTEM] Floor detected at y=${floorY.toFixed(2)}`);
                                 updateUI();
+                            }
+
+                            if (objectQueue.length > 0) {
+                                logToScreen(`[QUEUE] Processing ${objectQueue.length} queued objects.`);
+                                while(objectQueue.length > 0) {
+                                    const dataToPlace = objectQueue.shift();
+                                    handleRemoteObjectPlacement(dataToPlace);
+                                }
                             }
                             
                             const Y_TOLERANCE = 0.2;
-                            isPlaceable = Math.abs(hitY - floorY) < Y_TOLERANCE;
+                            isPlaceable = Math.abs(hitPose.transform.position.y - floorY) < Y_TOLERANCE;
                             
                             if(reticle) reticle.matrix.fromArray(hitPose.transform.matrix);
                             
