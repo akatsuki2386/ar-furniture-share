@@ -1,11 +1,10 @@
-// ★変更点: requireからimportに書き方を変更
 import express from 'express';
 import http from 'http';
-import { WebSocketServer } from 'ws'; // wsライブラリのインポート方法も変更
+import { WebSocketServer } from 'ws';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// ESモジュールでは__dirnameが使えないため、同等の機能を実現するおまじない
+// ESモジュールでは__dirnameが使えないため、同等の機能を実現する
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -13,23 +12,21 @@ const __dirname = path.dirname(__filename);
 const app = express();
 // HTTPサーバーを作成
 const server = http.createServer(app);
-// WebSocketサーバーをHTTPサーバーにアタッチ (★変更点: new WebSocketServer)
+// WebSocketサーバーをHTTPサーバーにアタッチ
 const wss = new WebSocketServer({ server });
 
-const rooms = {}; // 全ルームの状態を管理するオブジェクト
+const rooms = {};
 
-// 静的ファイル（glb, cssなど）を配信
-app.use(express.static(path.join(__dirname)));
+// ★★★ 変更点 ★★★
+// publicフォルダ内を静的ファイルの置き場所として設定します。
+// これにより、/index.htmlや/chair.glbへのアクセスが正しく処理されます。
+app.use(express.static(path.join(__dirname, 'public')));
 
-// ルートURLへのアクセス時にindex.htmlを返す
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
 
 // WebSocketの接続処理
 wss.on('connection', (ws) => {
   console.log('Client connected');
-  ws.roomId = null; // 各クライアントにルームIDを保持させる
+  ws.roomId = null;
 
   ws.on('message', (message) => {
     try {
