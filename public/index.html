@@ -941,12 +941,10 @@
             let isRotatingContinuously = false;
             let continuousRotationDirection = 0;
             
-            // ★ 変更点: デバッグログ表示用のDOM要素を取得
             const logDisplay = document.getElementById('log-display');
 
             init();
 
-            // ★ 変更点: デバッグログを画面に表示するヘルパー関数
             function logToScreen(message) {
                 if (logDisplay) {
                     const p = document.createElement('p');
@@ -954,8 +952,8 @@
                     p.textContent = `[${timestamp}] ${message}`;
                     p.style.margin = '0';
                     p.style.whiteSpace = 'pre-wrap';
-                    logDisplay.prepend(p); // 新しいログを一番上に表示
-                    if (logDisplay.children.length > 20) { // ログが溜まりすぎないように削除
+                    logDisplay.prepend(p);
+                    if (logDisplay.children.length > 20) {
                         logDisplay.removeChild(logDisplay.lastChild);
                     }
                 }
@@ -1010,7 +1008,6 @@
             function connectToServer(mode, code = null) {
                 if (isSoloMode) return;
                 
-                // ★修正点2: あなたのRenderアプリのURLに書き換える
                 const socketURL = 'wss://ar-furniture-share.onrender.com';
                 
                 socket = new WebSocket(socketURL); 
@@ -1024,7 +1021,6 @@
                     } else if (mode === 'join') {
                         roomId = code;
                         socket.send(JSON.stringify({ type: 'joinRoom', roomId: code }));
-                        // ★ 変更点: 参加時にルームIDを即時表示
                         document.getElementById('room-id-display').textContent = roomId;
                         logToScreen(`[SEND] joinRoom: ${code}`);
                     }
@@ -1033,17 +1029,14 @@
                 socket.onmessage = (event) => {
                     const data = JSON.parse(event.data);
                     
-                    // ★ 変更点: 受信データをすべてログに表示
                     logToScreen(`[RECV] ${data.type}`);
 
                     if (data.type === 'roomCreated') {
                         roomId = data.roomId;
-                        // ★ 変更点: ルームID表示を更新
                         document.getElementById('room-id-display').textContent = roomId;
                         alert(`ルームコード: ${roomId}\nこのコードを他の人に共有してください。`);
                     }
                     
-                    // ★ 変更点: 接続人数の更新（サーバー側の対応が必要）
                     if (data.type === 'updateConnections') {
                         document.getElementById('connection-count').textContent = data.count;
                     }
@@ -1052,7 +1045,6 @@
                         handleRemoteObjectPlacement(data.object);
                     }
                     
-                    // ★ 変更点: 更新と削除のメッセージを処理
                     if (data.type === 'updateObject') {
                         const objectToUpdate = placedObjects.get(data.object.uuid);
                         if (objectToUpdate) {
@@ -1070,7 +1062,6 @@
                         }
                     }
 
-                    // ★ 変更点: 参加時に既存オブジェクトを受け取る処理（サーバー側の対応が必要）
                     if (data.type === 'initialState') {
                         data.objects.forEach(objData => handleRemoteObjectPlacement(objData));
                     }
@@ -1092,11 +1083,17 @@
                 if (placedObjects.has(objectData.uuid)) return;
 
                 const furniture = furnitureData.find(f => f.name === objectData.name);
-                if (!furniture) return;
+                // ★ 変更点: 該当する家具データがない場合のエラーログを追加
+                if (!furniture) {
+                    logToScreen(`[ERROR] Furniture data not found for name: ${objectData.name}`);
+                    return;
+                }
 
                 const gltf = preloadedModels.get(furniture.file);
+                // ★ 変更点: モデルがプリロードされていない場合のエラーログを追加
                 if (!gltf) {
                     console.error(`Model not preloaded: ${furniture.file}`);
+                    logToScreen(`[ERROR] Model not preloaded: ${furniture.file}`);
                     return;
                 }
 
@@ -1163,7 +1160,6 @@
                 initializeARExperience();
                 preloadModels();
 
-                // ★ 変更点: マルチプレイ時にデバッグ情報を表示
                 if (!isSoloMode) {
                     document.getElementById('debug-info').style.display = 'block';
                 }
@@ -1659,7 +1655,6 @@
                 if (appState === 'PLACING') {
                     placeNewObject();
                 } else if (appState === 'EDITING') {
-                    // ★ 変更点: 更新情報を送信
                     if (!isSoloMode && socket && socket.readyState === WebSocket.OPEN && selectedObject) {
                         const objectData = {
                             uuid: selectedObject.uuid,
@@ -1691,7 +1686,6 @@
             function startDeleteAnimation(objectToDelete) {
                 if (!objectToDelete) return;
                 
-                // ★ 変更点: 削除情報を送信
                 if (!isSoloMode && socket && socket.readyState === WebSocket.OPEN) {
                     if (placedObjects.has(objectToDelete.uuid)) {
                         socket.send(JSON.stringify({
@@ -1758,7 +1752,6 @@
                         type: 'placeObject',
                         object: objectData
                     }));
-                    // ★ 変更点: 送信ログを表示
                     logToScreen(`[SEND] placeObject: ${currentFurniture.name}`);
                 }
 
