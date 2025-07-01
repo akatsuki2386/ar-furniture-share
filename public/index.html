@@ -609,7 +609,7 @@
         <div id="start-menu" style="margin-top: 40px; display: flex; flex-direction: column; gap: 15px; align-items: center;">
             <button id="create-room-button" class="menu-button">みんなで使う (ルーム作成)</button>
             <button id="join-room-button" class="menu-button">ルームに参加する</button>
-            <button id="solo-play-button" class="menu-button" style="display: none;">一人で試す</button>
+            <button id="solo-play-button" class="menu-button">一人で試す</button>
         </div>
     </div>
     <div id="ios-ar-container">
@@ -864,7 +864,7 @@
             </div>
         </div>
     </div>
-
+    
     <script type="importmap">
         {
             "imports": {
@@ -900,7 +900,7 @@
 
             let socket = null;
             let roomId = null;
-            let isSoloMode = true; // Solo or collaboration mode flag
+            let isSoloMode = true;
 
             const furnitureData = [
                 { name: 'イス',   file: 'chair.glb',      height: 0.79 },
@@ -909,7 +909,7 @@
             ];
             let currentFurniture = furnitureData[0];
             let previewObject = null;
-            const placedObjects = new Map(); // Use Map to manage objects by UUID
+            const placedObjects = new Map();
             const raycaster = new THREE.Raycaster();
             let selectedObject = null;
             let hoveredObject = null;
@@ -943,8 +943,6 @@
                 const joinRoomButton = document.getElementById('join-room-button');
                 const soloPlayButton = document.getElementById('solo-play-button');
                 const joinRoomModal = document.getElementById('join-room-modal');
-
-                soloPlayButton.style.display = 'block'; // Show solo play button
                 
                 createRoomButton.addEventListener('click', () => {
                     isSoloMode = false;
@@ -977,20 +975,21 @@
             }
 
             function hideStartMenuAndEnterAR() {
-                // Manually trigger the AR button created by Three.js
                 const arButton = document.getElementById('ARButton');
                 if (arButton) {
                     arButton.click();
+                } else {
+                    console.error("ARButton not found. Could not start AR session.");
                 }
-                document.getElementById('start-menu').style.display = 'none';
             }
             
             function connectToServer(mode, code = null) {
                 if (isSoloMode) return;
-                // =================================================================
-                //  【重要】このURLは、あなたのRenderアプリの公開URLに書き換えてください
-                // =================================================================
-                socket = new WebSocket('wss://ar-furniture-share.onrender.com');  
+                
+                // ★修正点2: あなたのRenderアプリのURLに書き換える
+                const socketURL = 'wss://ar-furniture-share.onrender.com';
+                
+                socket = new WebSocket(socketURL); 
 
                 socket.onopen = () => {
                     console.log("Server connected.");
@@ -1007,8 +1006,6 @@
 
                     if (data.type === 'roomCreated') {
                         roomId = data.roomId;
-                        // TODO: Display room ID more gracefully
-                        console.log(`Room created: ${roomId}`);
                         alert(`ルームコード: ${roomId}\nこのコードを他の人に共有してください。`);
                     }
                     
@@ -1016,17 +1013,28 @@
                         handleRemoteObjectPlacement(data.object);
                     }
                 };
+
+                socket.onerror = (error) => {
+                    console.error("WebSocket Error:", error);
+                    alert("サーバーとの接続に失敗しました。URLが正しいか確認してください。");
+                };
             }
 
             function handleRemoteObjectPlacement(objectData) {
+                // Avoid placing an object that already exists
+                if (placedObjects.has(objectData.uuid)) return;
+
                 const furniture = furnitureData.find(f => f.name === objectData.name);
                 if (!furniture) return;
 
                 const gltf = preloadedModels.get(furniture.file);
-                if (!gltf) return;
+                if (!gltf) {
+                    console.error(`Model not preloaded: ${furniture.file}`);
+                    return;
+                }
 
                 const newObject = gltf.scene.clone();
-                newObject.uuid = objectData.uuid; // Assign UUID from server
+                newObject.uuid = objectData.uuid;
                 setObjectTransparency(newObject, false);
 
                 newObject.position.copy(objectData.position);
@@ -1034,10 +1042,9 @@
                 newObject.scale.copy(objectData.scale);
                 
                 scene.add(newObject);
-                placedObjects.set(newObject.uuid, newObject); // Add to map
+                placedObjects.set(newObject.uuid, newObject);
             }
 
-            // --- Core App Initialization ---
             function init() {
                 scene = new THREE.Scene();
                 camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
@@ -1061,19 +1068,19 @@
                 overlay.addEventListener('touchend', handleTouchEnd);
                 
                 setupSVGs();
-
-                // Generate AR Button and then set up the start menu
+                
+                // ★修正点3: ARButtonを動的に生成し、その後メニューをセットアップ
                 document.body.appendChild(ARButton.createButton(renderer, {
                     requiredFeatures: ['hit-test'],
                     optionalFeatures: ['dom-overlay'],
                     domOverlay: { root: document.querySelector("#overlay") }
                 }));
-                // Hide the default AR Button, we will trigger it via our menu
                 const arButton = document.getElementById('ARButton');
                 if (arButton) {
-                   arButton.style.display = 'none'; 
+                   arButton.style.display = 'none';
                 }
-                setupStartMenu();
+                
+                setupStartMenu(); // ARボタンがDOMに存在した後に呼び出す
 
                 renderer.xr.addEventListener('sessionstart', onSessionStart);
                 renderer.xr.addEventListener('sessionend', onSessionEnd);
@@ -1092,7 +1099,7 @@
             }
 
             function onSessionEnd() {
-                window.location.reload(); // Simple way to reset everything
+                window.location.reload();
             }
 
             function initializeARExperience() {
@@ -1106,7 +1113,6 @@
                 setupUIEventListeners();
             }
             
-            // --- UI and Event Listeners Setup ---
             function setupSVGs() {
                 document.getElementById('add-button').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" style="width: 32px; height: 32px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>`;
                 document.getElementById('edit-button').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 28px; height: 28px;"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" /></svg>`;
@@ -1258,14 +1264,6 @@
                 button.addEventListener('mouseleave', pressEnd);
             }
             
-            // --- Other functions (preloadModels, createCrossMark, getDistance, etc.) go here ---
-            // ... (The rest of the functions from the previous code block would be placed here)
-            // ... (They are omitted for brevity but should be included in the final file)
-            // ... For example: placeNewObject, setObjectTransparency, handleTouchStart, render loop, etc.
-
-            
-            // --- Core App Logic & Rendering ---
-
             function createCrossMark() {
                 const canvas = document.createElement('canvas');
                 const size = 256;
@@ -1314,7 +1312,6 @@
             }
             
             function resetScene() {
-                // Clear all placed objects from the scene and the map
                 placedObjects.forEach(object => scene.remove(object));
                 placedObjects.clear();
 
@@ -1379,7 +1376,6 @@
             }
 
             function handleTouchStart(event) {
-                // Ignore touches on UI elements, allow only on the overlay itself
                 if (event.target !== event.currentTarget || confirmDialog.style.display === 'flex') return;
                 event.preventDefault();
 
@@ -1413,7 +1409,6 @@
 
                         if (intersects.length > 0) {
                             let targetObject = intersects[0].object;
-                            // Traverse up to find the root object that is in our check list
                             while (targetObject.parent && !objectsToCheck.includes(targetObject)) {
                                 targetObject = targetObject.parent;
                             }
@@ -1643,7 +1638,7 @@
             function placeNewObject() { 
                 if (!previewObject) return;
                 const solidObject = previewObject.clone();
-                solidObject.uuid = THREE.MathUtils.generateUUID(); // Assign a new UUID
+                solidObject.uuid = THREE.MathUtils.generateUUID();
                 setObjectTransparency(solidObject, false);
 
                 solidObject.position.copy(previewObject.position);
@@ -1928,9 +1923,9 @@
                 
                 renderer.render(scene, camera);
             }
-            
-            main();
         }
+        
+        main();
     </script>
 </body>
 </html>
