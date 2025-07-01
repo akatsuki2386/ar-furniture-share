@@ -1,20 +1,24 @@
-// 必要なライブラリをインポート
-const express = require('express');
-const http = require('http');
-const WebSocket = require('ws');
-const path = require('path');
+// ★変更点: requireからimportに書き方を変更
+import express from 'express';
+import http from 'http';
+import { WebSocketServer } from 'ws'; // wsライブラリのインポート方法も変更
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// ESモジュールでは__dirnameが使えないため、同等の機能を実現するおまじない
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Expressアプリを作成
 const app = express();
 // HTTPサーバーを作成
 const server = http.createServer(app);
-// WebSocketサーバーをHTTPサーバーにアタッチ
-const wss = new WebSocket.Server({ server });
+// WebSocketサーバーをHTTPサーバーにアタッチ (★変更点: new WebSocketServer)
+const wss = new WebSocketServer({ server });
 
 const rooms = {}; // 全ルームの状態を管理するオブジェクト
 
-// publicフォルダ内の静的ファイル（glb, cssなど）を配信
-// ★重要: index.htmlと同じ階層にpublicフォルダを作成し、glbファイルを入れてください
+// 静的ファイル（glb, cssなど）を配信
 app.use(express.static(path.join(__dirname)));
 
 // ルートURLへのアクセス時にindex.htmlを返す
@@ -55,7 +59,6 @@ wss.on('connection', (ws) => {
               updateConnectionCount(roomId);
             } else {
               console.log(`Room not found: ${roomId}`);
-              // 本来はクライアントにエラー通知を送る
             }
             break;
           }
@@ -103,25 +106,23 @@ wss.on('connection', (ws) => {
     }
   });
 });
-
-// ★修正点: 全員に通知する専用の関数
+    
 function updateConnectionCount(roomId) {
     if (rooms[roomId]) {
         const count = rooms[roomId].clients.size;
         const message = JSON.stringify({ type: 'updateConnections', count: count });
         rooms[roomId].clients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
+            if (client.readyState === 1) { // WebSocket.OPEN
                 client.send(message);
             }
         });
     }
 }
 
-// ★修正点: 「送信者以外」に通知する専用の関数
 function broadcast(roomId, message, senderToExclude) {
     if (rooms[roomId]) {
         rooms[roomId].clients.forEach(client => {
-            if (client !== senderToExclude && client.readyState === WebSocket.OPEN) {
+            if (client !== senderToExclude && client.readyState === 1) { // WebSocket.OPEN
                 client.send(message);
             }
         });
