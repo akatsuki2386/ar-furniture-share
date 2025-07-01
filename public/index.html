@@ -1092,8 +1092,8 @@
                 const gltf = preloadedModels.get(furniture.file);
                 // ★ 変更点: モデルがプリロードされていない場合のエラーログを追加
                 if (!gltf) {
-                    console.error(`Model not preloaded: ${furniture.file}`);
                     logToScreen(`[ERROR] Model not preloaded: ${furniture.file}`);
+                    console.error(`Model not preloaded: ${furniture.file}`);
                     return;
                 }
 
