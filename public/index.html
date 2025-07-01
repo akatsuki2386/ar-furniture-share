@@ -623,7 +623,15 @@
         <div id="debug-info" style="position: absolute; top: 110px; left: 20px; color: white; font-family: monospace; background-color: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; z-index: 200; display: none; pointer-events: none; max-width: 85%;">
             <p style="margin: 0 0 5px 0;"><strong>Room ID:</strong> <span id="room-id-display">N/A</span></p>
             <p style="margin: 0 0 10px 0;"><strong>Connections:</strong> <span id="connection-count">0</span></p>
-            <div id="log-display" style="max-height: 150px; overflow-y: auto; font-size: 12px; line-height: 1.4;"></div>
+            
+            <div id="log-display" style="border-top: 1px solid #555; padding-top: 5px; margin-top: 5px;">
+                <p style="margin:0; font-weight:bold; color:#aaa;">Socket/App Logs:</p>
+                <div id="app-log-content" style="max-height: 100px; overflow-y: auto; font-size: 12px; line-height: 1.4;"></div>
+            </div>
+            <div id="console-log-display" style="border-top: 1px solid #555; padding-top: 5px; margin-top: 5px;">
+                <p style="margin:0; font-weight:bold; color:#aaa;">Browser Console:</p>
+                <div id="console-log-content" style="max-height: 150px; overflow-y: auto; font-size: 12px; line-height: 1.4;"></div>
+            </div>
         </div>
 
         <div id="help-modal">
@@ -887,6 +895,45 @@
 
         // --- Main App Logic ---
         function main() {
+            // ★ 変更点: コンソール出力を画面に表示する機能
+            const consoleLogContent = document.getElementById('console-log-content');
+            if (consoleLogContent) {
+                const originalConsole = {
+                    log: console.log,
+                    error: console.error,
+                    warn: console.warn,
+                    info: console.info
+                };
+
+                function logToConsoleScreen(message, color = 'white') {
+                    const p = document.createElement('p');
+                    p.textContent = message;
+                    p.style.margin = '0';
+                    p.style.whiteSpace = 'pre-wrap';
+                    p.style.color = color;
+                    consoleLogContent.prepend(p);
+                    if (consoleLogContent.children.length > 30) {
+                        consoleLogContent.removeChild(consoleLogContent.lastChild);
+                    }
+                }
+
+                console.log = function(...args) {
+                    const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+                    logToConsoleScreen(`[LOG] ${message}`);
+                    originalConsole.log.apply(console, args);
+                };
+                console.error = function(...args) {
+                    const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+                    logToConsoleScreen(`[ERROR] ${message}`, '#ff7979'); // Red
+                    originalConsole.error.apply(console, args);
+                };
+                console.warn = function(...args) {
+                    const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+                    logToConsoleScreen(`[WARN] ${message}`, '#f9ca24'); // Yellow
+                    originalConsole.warn.apply(console, args);
+                };
+            }
+            
             let camera, scene, renderer;
             let hitTestSource = null;
             let hitTestSourceRequested = false;
@@ -941,20 +988,22 @@
             let isRotatingContinuously = false;
             let continuousRotationDirection = 0;
             
-            const logDisplay = document.getElementById('log-display');
+            // ★ 変更点: アプリケーションログの出力先を変更
+            const appLogContent = document.getElementById('app-log-content');
 
             init();
-
+            
+            // ★ 変更点: アプリケーションログ表示用のヘルパー関数
             function logToScreen(message) {
-                if (logDisplay) {
+                if (appLogContent) {
                     const p = document.createElement('p');
                     const timestamp = new Date().toLocaleTimeString();
                     p.textContent = `[${timestamp}] ${message}`;
                     p.style.margin = '0';
                     p.style.whiteSpace = 'pre-wrap';
-                    logDisplay.prepend(p);
-                    if (logDisplay.children.length > 20) {
-                        logDisplay.removeChild(logDisplay.lastChild);
+                    appLogContent.prepend(p);
+                    if (appLogContent.children.length > 20) {
+                        appLogContent.removeChild(appLogContent.lastChild);
                     }
                 }
             }
@@ -1013,7 +1062,6 @@
                 socket = new WebSocket(socketURL); 
 
                 socket.onopen = () => {
-                    console.log("Server connected.");
                     logToScreen("Server connected.");
                     if (mode === 'create') {
                         socket.send(JSON.stringify({ type: 'createRoom' }));
@@ -1040,6 +1088,11 @@
                     if (data.type === 'updateConnections') {
                         document.getElementById('connection-count').textContent = data.count;
                     }
+                    
+                    if (data.type === 'initialState') {
+                        logToScreen(`[INFO] Syncing ${data.objects.length} existing objects.`);
+                        data.objects.forEach(objData => handleRemoteObjectPlacement(objData));
+                    }
 
                     if (data.type === 'placeObject') {
                         handleRemoteObjectPlacement(data.object);
@@ -1061,61 +1114,46 @@
                             placedObjects.delete(data.uuid);
                         }
                     }
-
-                    if (data.type === 'initialState') {
-                        data.objects.forEach(objData => handleRemoteObjectPlacement(objData));
-                    }
                 };
 
                 socket.onerror = (error) => {
                     console.error("WebSocket Error:", error);
-                    logToScreen("WebSocket Error!");
-                    alert("サーバーとの接続に失敗しました。URLが正しいか確認してください。");
                 };
 
                 socket.onclose = () => {
-                    console.log("Server disconnected.");
                     logToScreen("Server disconnected.");
                 };
             }
 
-            // index.html の <script type="module"> 内
-            // この関数をまるごと置き換えてください
-
             function handleRemoteObjectPlacement(objectData) {
                 if (placedObjects.has(objectData.uuid)) return;
-            
+
                 const furniture = furnitureData.find(f => f.name === objectData.name);
                 if (!furniture) {
                     logToScreen(`[ERROR] Furniture data not found for name: ${objectData.name}`);
                     return;
                 }
-            
+
                 const gltf = preloadedModels.get(furniture.file);
                 if (!gltf) {
                     logToScreen(`[ERROR] Model not loaded yet: ${furniture.file}`);
                     console.error(`Model not preloaded: ${furniture.file}`);
                     return;
                 }
-            
-                // ★ 変更点：受信した座標データをログに表示
-                const pos = objectData.position;
-                logToScreen(`[RECV] Pos: X=${pos.x.toFixed(2)}, Y=${pos.y.toFixed(2)}, Z=${pos.z.toFixed(2)}`);
-            
+
                 const newObject = gltf.scene.clone();
                 newObject.uuid = objectData.uuid;
                 setObjectTransparency(newObject, false);
-            
+
                 newObject.position.copy(objectData.position);
                 newObject.quaternion.copy(objectData.rotation);
                 newObject.scale.copy(objectData.scale);
                 
                 scene.add(newObject);
                 placedObjects.set(newObject.uuid, newObject);
-            
-                // ★ 変更点：シーンへの追加が成功したことをログに表示
-                logToScreen('[SUCCESS] Object added to scene.');
+                logToScreen(`[INFO] Added object ${objectData.name} to scene.`);
             }
+
             function init() {
                 scene = new THREE.Scene();
                 camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
@@ -1161,15 +1199,16 @@
             function onSessionStart() {
                 overlay.style.pointerEvents = 'auto';
                 document.getElementById('title-container').style.display = 'none';
+                
+                if (!isSoloMode) {
+                    document.getElementById('debug-info').style.display = 'block';
+                }
+
                 resetScene();
                 isEditMode = true; 
                 updateUI();
                 initializeARExperience();
                 preloadModels();
-
-                if (!isSoloMode) {
-                    document.getElementById('debug-info').style.display = 'block';
-                }
             }
 
             function onSessionEnd() {
@@ -1376,8 +1415,12 @@
                     return new Promise((resolve, reject) => {
                         loader.load(item.file, (gltf) => {
                             preloadedModels.set(item.file, gltf);
+                            console.log(`Model loaded: ${item.file}`);
                             resolve();
-                        }, undefined, reject);
+                        }, undefined, (error) => {
+                            console.error(`Failed to load model: ${item.file}`, error);
+                            reject(error);
+                        });
                     });
                 });
                 Promise.all(loadingPromises)
