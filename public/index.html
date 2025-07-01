@@ -1144,8 +1144,16 @@
                 const newObject = gltf.scene.clone();
                 newObject.uuid = objectData.uuid;
                 setObjectTransparency(newObject, false);
+                // ★★★ 非常に重要な変更点 ★★★
+                // ネットワークから受信したY座標は使わず、この端末が認識している床の高さ(floorY)に合わせる
+                newObject.position.set(
+                    objectData.position.x,
+                    floorY !== null ? floorY : 0, // ローカルで検出した床の高さを使う。未検出なら0。
+                    objectData.position.z
+                );
+                // ★★★★★★★★★★★★★★★★★
 
-                newObject.position.copy(objectData.position);
+                //newObject.position.copy(objectData.position);
                 newObject.quaternion.copy(objectData.rotation);
                 newObject.scale.copy(objectData.scale);
                 
