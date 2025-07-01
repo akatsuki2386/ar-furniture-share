@@ -1,0 +1,14 @@
+{
+  "name": "ar-collaboration-app",
+  "version": "1.0.0",
+  "description": "Real-time AR collaboration app",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.17.0"
+  }
+}
