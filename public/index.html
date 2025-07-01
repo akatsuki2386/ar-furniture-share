@@ -1144,13 +1144,24 @@
                 const newObject = gltf.scene.clone();
                 newObject.uuid = objectData.uuid;
                 setObjectTransparency(newObject, false);
+                // ★★★ 強制表示テスト用のコード ★★★
+                // ネットワークの座標を無視し、目の前のレティクルの位置にモデルをコピーする
+                if (reticle && reticle.visible) {
+                    newObject.position.copy(reticle.position);
+                } else {
+                    // レティクルが見えない場合は、とりあえず床の高さに置く
+                    newObject.position.set(0, floorY !== null ? floorY : 0, -1);
+                }
+                // ★★★★★★★★★★★★★★★★★★★★★
                 // ★★★ 非常に重要な変更点 ★★★
                 // ネットワークから受信したY座標は使わず、この端末が認識している床の高さ(floorY)に合わせる
+                /*
                 newObject.position.set(
                     objectData.position.x,
                     floorY !== null ? floorY : 0, // ローカルで検出した床の高さを使う。未検出なら0。
                     objectData.position.z
                 );
+                */
                 // ★★★★★★★★★★★★★★★★★
 
                 //newObject.position.copy(objectData.position);
